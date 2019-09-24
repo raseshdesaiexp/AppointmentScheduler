@@ -23,8 +23,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 public class AppointmentServiceImpl implements AppointmentService {
 
     @Autowired
@@ -149,11 +151,14 @@ public class AppointmentServiceImpl implements AppointmentService {
             appointment.setStart(start);
             appointment.setEnd(start.plusMinutes(work.getDuration()));
             appointmentRepository.save(appointment);
-            notificationService.newNewAppointmentScheduledNotification(appointment, true);
+            notificationService.newNewAppointmentScheduledNotification(appointment,true);
+            log.info("Appointment created with with workId {}, providerId {}, customerId {}, startTime {}", workId,
+                     providerId, customerId, start);
         } else {
+            log.info("Error encountered creating appointment with workId {}, providerId {}, customerId " +
+                     "{}, startTime {}", workId, providerId, customerId, start);
             throw new RuntimeException();
         }
-
     }
 
     @Override
