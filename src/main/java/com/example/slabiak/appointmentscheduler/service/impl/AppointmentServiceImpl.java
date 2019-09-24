@@ -11,6 +11,7 @@ import com.example.slabiak.appointmentscheduler.entity.user.provider.Provider;
 import com.example.slabiak.appointmentscheduler.model.DayPlan;
 import com.example.slabiak.appointmentscheduler.model.TimePeroid;
 import com.example.slabiak.appointmentscheduler.service.*;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PostAuthorize;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -24,7 +25,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
+import lombok.extern.slf4j.Slf4j;
+
 @Service
+@Slf4j
 public class AppointmentServiceImpl implements AppointmentService {
 
     @Autowired
@@ -56,7 +60,8 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
-    @PostAuthorize("returnObject.provider.id == principal.id or returnObject.customer.id == principal.id or hasRole('ADMIN') ")
+    @PostAuthorize(
+            "returnObject.provider.id == principal.id or returnObject.customer.id == principal.id or hasRole('ADMIN') ")
     public Appointment getAppointmentById(int id) {
         Optional<Appointment> result = appointmentRepository.findById(id);
         Appointment appointment = null;
@@ -109,12 +114,14 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     @Override
     public List<Appointment> getAppointmentsByProviderAtDay(int providerId, LocalDate day) {
-        return appointmentRepository.findByProviderIdWithStartInPeroid(providerId, day.atStartOfDay(), day.atStartOfDay().plusDays(1));
+        return appointmentRepository
+                .findByProviderIdWithStartInPeroid(providerId, day.atStartOfDay(), day.atStartOfDay().plusDays(1));
     }
 
     @Override
     public List<Appointment> getAppointmentsByCustomerAtDay(int providerId, LocalDate day) {
-        return appointmentRepository.findByCustomerIdWithStartInPeroid(providerId, day.atStartOfDay(), day.atStartOfDay().plusDays(1));
+        return appointmentRepository
+                .findByCustomerIdWithStartInPeroid(providerId, day.atStartOfDay(), day.atStartOfDay().plusDays(1));
     }
 
     @Override
@@ -150,10 +157,14 @@ public class AppointmentServiceImpl implements AppointmentService {
             appointment.setEnd(start.plusMinutes(work.getDuration()));
             appointmentRepository.save(appointment);
             notificationService.newNewAppointmentScheduledNotification(appointment, true);
+            log.info("New apppointmented created with workId {}, providerId {}, customerId {}, startTime {} ", workId
+                    , providerId, customerId, start);
         } else {
+            log.error("Error encountered creating appointment with workId {}, providerId {}, customerId {}, " +
+                      "startTime {} ", workId
+                    , providerId, customerId, start);
             throw new RuntimeException();
         }
-
     }
 
     @Override
@@ -174,9 +185,11 @@ public class AppointmentServiceImpl implements AppointmentService {
     public List<TimePeroid> calculateAvailableHours(List<TimePeroid> availableTimePeroids, Work work) {
         ArrayList<TimePeroid> availableHours = new ArrayList<TimePeroid>();
         for (TimePeroid peroid : availableTimePeroids) {
-            TimePeroid workPeroid = new TimePeroid(peroid.getStart(), peroid.getStart().plusMinutes(work.getDuration()));
+            TimePeroid workPeroid =
+                    new TimePeroid(peroid.getStart(), peroid.getStart().plusMinutes(work.getDuration()));
             while (workPeroid.getEnd().isBefore(peroid.getEnd()) || workPeroid.getEnd().equals(peroid.getEnd())) {
-                availableHours.add(new TimePeroid(workPeroid.getStart(), workPeroid.getStart().plusMinutes(work.getDuration())));
+                availableHours.add(new TimePeroid(workPeroid.getStart(),
+                                                  workPeroid.getStart().plusMinutes(work.getDuration())));
                 workPeroid.setStart(workPeroid.getStart().plusMinutes(work.getDuration()));
                 workPeroid.setEnd(workPeroid.getEnd().plusMinutes(work.getDuration()));
             }
@@ -185,19 +198,27 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     @Override
-    public List<TimePeroid> excludeAppointmentsFromTimePeroids(List<TimePeroid> peroids, List<Appointment> appointments) {
+    public List<TimePeroid> excludeAppointmentsFromTimePeroids(List<TimePeroid> peroids,
+                                                               List<Appointment> appointments) {
 
         List<TimePeroid> toAdd = new ArrayList<TimePeroid>();
         Collections.sort(appointments);
         for (Appointment appointment : appointments) {
             for (TimePeroid peroid : peroids) {
-                if ((appointment.getStart().toLocalTime().isBefore(peroid.getStart()) || appointment.getStart().toLocalTime().equals(peroid.getStart())) && appointment.getEnd().toLocalTime().isAfter(peroid.getStart()) && appointment.getEnd().toLocalTime().isBefore(peroid.getEnd())) {
+                if ((appointment.getStart().toLocalTime().isBefore(peroid.getStart()) ||
+                     appointment.getStart().toLocalTime().equals(peroid.getStart())) &&
+                    appointment.getEnd().toLocalTime().isAfter(peroid.getStart()) &&
+                    appointment.getEnd().toLocalTime().isBefore(peroid.getEnd())) {
                     peroid.setStart(appointment.getEnd().toLocalTime());
                 }
-                if (appointment.getStart().toLocalTime().isAfter(peroid.getStart()) && appointment.getStart().toLocalTime().isBefore(peroid.getEnd()) && appointment.getEnd().toLocalTime().isAfter(peroid.getEnd()) || appointment.getEnd().toLocalTime().equals(peroid.getEnd())) {
+                if (appointment.getStart().toLocalTime().isAfter(peroid.getStart()) &&
+                    appointment.getStart().toLocalTime().isBefore(peroid.getEnd()) &&
+                    appointment.getEnd().toLocalTime().isAfter(peroid.getEnd()) ||
+                    appointment.getEnd().toLocalTime().equals(peroid.getEnd())) {
                     peroid.setEnd(appointment.getStart().toLocalTime());
                 }
-                if (appointment.getStart().toLocalTime().isAfter(peroid.getStart()) && appointment.getEnd().toLocalTime().isBefore(peroid.getEnd())) {
+                if (appointment.getStart().toLocalTime().isAfter(peroid.getStart()) &&
+                    appointment.getEnd().toLocalTime().isBefore(peroid.getEnd())) {
                     toAdd.add(new TimePeroid(peroid.getStart(), appointment.getStart().toLocalTime()));
                     peroid.setStart(appointment.getEnd().toLocalTime());
                 }
@@ -210,7 +231,8 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     @Override
     public List<Appointment> getCanceledAppointmentsByCustomerIdForCurrentMonth(int customerId) {
-        return appointmentRepository.findByCustomerIdCanceledAfterDate(customerId, LocalDate.now().with(TemporalAdjusters.firstDayOfMonth()).atStartOfDay());
+        return appointmentRepository.findByCustomerIdCanceledAfterDate(customerId, LocalDate.now()
+                .with(TemporalAdjusters.firstDayOfMonth()).atStartOfDay());
     }
 
     @Override
@@ -219,7 +241,8 @@ public class AppointmentServiceImpl implements AppointmentService {
          * find appointments which requires status change from scheudled to finished and change their status
          * (all appointments which have status 'scheduled' and their end date is before current timestamp)
          * */
-        for (Appointment appointment : appointmentRepository.findScheduledByUserIdWithEndBeforeDate(LocalDateTime.now(), userId)) {
+        for (Appointment appointment : appointmentRepository
+                .findScheduledByUserIdWithEndBeforeDate(LocalDateTime.now(), userId)) {
             appointment.setStatus("finished");
             updateAppointment(appointment);
         }
@@ -227,7 +250,8 @@ public class AppointmentServiceImpl implements AppointmentService {
          * find appointments which requires status change from finished to confirmed and change their status
          * (all appointments which have status 'finished' and their end date is more than 24 hours before current timestamp)
          * */
-        for (Appointment appointment : appointmentRepository.findFinishedByUserIdWithEndBeforeDate(LocalDateTime.now().minusDays(1), userId)) {
+        for (Appointment appointment : appointmentRepository
+                .findFinishedByUserIdWithEndBeforeDate(LocalDateTime.now().minusDays(1), userId)) {
 
             appointment.setStatus("invoiced");
             updateAppointment(appointment);
@@ -414,7 +438,8 @@ public class AppointmentServiceImpl implements AppointmentService {
             return false;
         }
         Work work = workService.getWorkById(workId);
-        TimePeroid timePeroid = new TimePeroid(start.toLocalTime(), start.toLocalTime().plusMinutes(work.getDuration()));
+        TimePeroid timePeroid =
+                new TimePeroid(start.toLocalTime(), start.toLocalTime().plusMinutes(work.getDuration()));
         if (!getAvailableHours(providerId, customerId, workId, start.toLocalDate()).contains(timePeroid)) {
             return false;
         }
